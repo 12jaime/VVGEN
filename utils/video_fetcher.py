@@ -1,37 +1,37 @@
-import requests
-import re
-import yt_dlp
 import os
+from googleapiclient.discovery import build
+import yt_dlp
 
 def fetch_and_download_videos(keyword, max_videos=3, output_dir='videos'):
+    # Ensure the output directory exists
     os.makedirs(output_dir, exist_ok=True)
 
-    # 1. Fetch video URLs from YouTube search
-    query = keyword.replace(' ', '+')
-    url = f'https://www.youtube.com/results?search_query={query}'
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    # Retrieve the API key from environment variables
+    api_key = os.getenv("YOUTUBE_API_KEY")
+    if not api_key:
+        raise Exception("❌ YOUTUBE_API_KEY environment variable not set.")
 
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        raise Exception(f"Failed to fetch YouTube results (status: {response.status_code})")
+    # Build the YouTube API client
+    youtube = build('youtube', 'v3', developerKey=api_key)
 
-    video_ids = []
-    seen = set()
-    for match in re.findall(r"watch\?v=(\w{11})", response.text):
-        if match not in seen:
-            video_ids.append(match)
-            seen.add(match)
-        if len(video_ids) >= max_videos:
-            break
+    # Search for videos matching the keyword
+    search_response = youtube.search().list(
+        q=keyword,
+        part='id',
+        type='video',
+        maxResults=max_videos
+    ).execute()
 
+    # Extract video IDs from the search response
+    video_ids = [item['id']['videoId'] for item in search_response.get('items', [])]
     if not video_ids:
-        raise Exception("No video IDs found.")
+        raise Exception("❌ No videos found for the given keyword.")
 
     downloaded_files = []
 
-    # 2. Download each video using yt-dlp
-    for i, vid in enumerate(video_ids):
-        video_url = f"https://www.youtube.com/watch?v={vid}"
+    # Download each video using yt_dlp
+    for i, video_id in enumerate(video_ids):
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
         output_path = os.path.join(output_dir, f'video_{i}.mp4')
 
         ydl_opts = {
